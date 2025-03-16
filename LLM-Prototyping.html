@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Chat + Code Editor</title>
+    <!-- CodeMirror CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+    <style>
+        /* Base styles */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            height: 100vh; 
+            overflow: hidden;
+            color: #f8fafc;
+            background-color: #1a202c;
+        }
+        
+        /* Layout */
+        .container { display: flex; height: 100vh; }
+        
+        /* Left side - Chat */
+        .chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #4a5568;
+            background-color: #2d3748;
+            width: 50%;
+            min-width: 300px;
+            max-width: 50%;
+            overflow: hidden;
+        }
+        
+        /* Uniform header styling for both panels */
+        .panel-header {
+            height: 64px;
+            padding: 0 1rem;
+            background-color: #3c4655;
+            color: white;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #4a5568;
+        }
+        
+        /* Uniform footer styling for both panels */
+		.panel-footer {
+			height: 64px;
+			padding: 0 1rem;
+			background-color: #3c4655;
+			display: flex;
+			align-items: center;
+			border-top: 1px solid #4a5568;
+			position: relative; 
+			z-index: 2;  
+		}
+        
+        .header-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .header-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn {
+            background-color: #4c566a;
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+        
+        .btn:hover {
+            background-color: #5e6d8f;
+        }
+        
+        .btn-primary {
+            background-color: #667eea;
+        }
+        
+        .btn-primary:hover {
+            background-color: #7c93ff;
+        }
+        
+        .btn-success {
+            background-color: #48bb78;
+        }
+        
+        .btn-success:hover {
+            background-color: #5bd88e;
+        }
+        
+        .messages-container {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            max-width: 100%;
+            width: 100%;
+            box-sizing: border-box;
+            background-color: #2d3748;
+        }
+        
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            max-width: 80%;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .user-message {
+            background-color: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .assistant-message {
+            background-color: #4a5568;
+            color: #e2e8f0;
+            margin-right: auto;
+        }
+        
+        .system-message {
+            background-color: #2d3748;
+            color: #a0aec0;
+            border: 1px dashed #4a5568;
+            margin: 0 auto;
+            font-style: italic;
+            text-align: center;
+        }
+        
+        .chat-input-container {
+            display: flex;
+            width: 100%;
+            padding: 0.75rem 1rem;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #4a5568;
+            border-radius: 0.25rem;
+            resize: none;
+            background-color: #2d3748;
+            color: #e2e8f0;
+            height: 40px;
+            margin-right: 0.5rem;
+        }
+        
+        .chat-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .send-button {
+            height: 40px;
+        }
+        
+        .send-button:disabled {
+            background-color: #4a5568;
+            cursor: not-allowed;
+        }
+        
+        /* Right side - Code Editor */
+        .editor-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #3c4655;
+        }
+        
+        .tabs {
+			display: flex;
+            background-color: #3c4655;
+            height: 64px;
+            border-bottom: 1px solid #4a5568;
+			align-items: center;
+        }
+        
+        .tab {
+            padding: 0.5rem 1.25rem;
+            background-color: #1a202c;
+            color: #a0aec0;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+			margin-left: 1rem;
+            height: 40px;
+        }
+        
+        .tab.active {
+            background-color: #667eea;
+            color: white;
+        }
+        
+		.editor-container {
+			flex: 1;
+			overflow: hidden;
+			background-color: #1a202c;
+			position: relative;
+		}
+        
+		.editor-pane {
+			height: 100%;
+			display: none;
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0; 
+		}
+        
+		.editor-pane.active {
+			display: block;  
+		}
+        
+        .controls {
+            justify-content: flex-end;
+            gap: 0.5rem;
+        }
+        
+		.CodeMirror {
+			height: 100% !important;
+			width: 100% !important;
+			font-family: 'Fira Code', monospace;
+			font-size: 14px;
+			line-height: 1.5;
+		}
+        
+		.CodeMirror-scroll {
+			overflow-x: auto !important;
+			overflow-y: scroll !important; /* Force vertical scrolling */
+			margin-bottom: 20px !important; /* Add bottom margin to ensure last lines are visible */
+			padding-bottom: 20px !important;  
+		}
+        
+		.CodeMirror-sizer {
+			margin-bottom: 20px !important;
+		}
+
+        .code-block {
+            background-color: #1a202c;
+            color: #e2e8f0;
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            white-space: pre;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+            border-left: 3px solid #667eea;
+        }
+        
+        /* Preview Modal */
+        .preview-modal {
+            display: none;
+            position: fixed;
+            z-index: 10;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        
+        .preview-content {
+            background-color: #2d3748;
+            margin: 2% auto;
+            padding: 20px;
+            width: 90%;
+            height: 90%;
+            border-radius: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #4a5568;
+        }
+        
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #4a5568;
+            color: #e2e8f0;
+        }
+        
+        .close-preview {
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #a0aec0;
+        }
+        
+        .close-preview:hover {
+            color: white;
+        }
+        
+        .preview-frame {
+            flex: 1;
+            border: 1px solid #4a5568;
+            border-radius: 0.25rem;
+            background-color: white;
+        }
+        
+        /* Config Modal */
+        .config-modal {
+            display: none;
+            position: fixed;
+            z-index: 10;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        
+        .config-content {
+            background-color: #2d3748;
+            margin: 10% auto;
+            padding: 20px;
+            width: 500px;
+            max-width: 90%;
+            border-radius: 0.5rem;
+            border: 1px solid #4a5568;
+            color: #e2e8f0;
+        }
+        
+        .config-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #4a5568;
+        }
+        
+        .close-config {
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #a0aec0;
+        }
+        
+        .close-config:hover {
+            color: white;
+        }
+        
+        .config-form {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #e2e8f0;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #4a5568;
+            border-radius: 0.25rem;
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .save-config {
+            padding: 0.75rem 1.5rem;
+            background-color: #667eea;
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            align-self: flex-end;
+            margin-top: 1rem;
+        }
+        
+        .save-config:hover {
+            background-color: #7c93ff;
+        }
+        
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 1.5rem;
+            height: 1.5rem;
+            border: 0.25rem solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 0.5rem;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left side - Chat -->
+        <div class="chat-section">
+            <div class="panel-header">
+                <span class="header-title">LLM Chat</span>
+                <div class="header-controls">
+                    <button class="btn btn-success" id="newChatButton" title="Clear Context and Start a New Conversation">New Chat</button>
+                    <button class="btn btn-primary" id="configButton" title="Settings for your LLM">Configure API</button>
+                </div>
+            </div>
+            <div class="messages-container" id="messages">
+                <div class="message system-message">
+                    Please configure the API settings to start chatting with the LLM.
+                </div>
+            </div>
+            <div class="panel-footer">
+                <div class="chat-input-container">
+                    <textarea class="chat-input" id="chatInput" placeholder="Type your message here..."></textarea>
+                    <button class="btn btn-primary send-button" id="sendButton" disabled>Send</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right side - Code Editor -->
+        <div class="editor-section">
+			<div class="panel-header">
+				<span class="header-title">Web Prototyping</span>
+				<div class="tabs">
+					<button class="tab active" id="htmlTab">HTML</button>
+					<button class="tab" id="cssTab">CSS</button>
+					<button class="tab" id="jsTab">JavaScript</button>
+				</div>
+			</div>
+            <div class="editor-container">
+                <div class="editor-pane active" id="htmlEditor"></div>
+                <div class="editor-pane" id="cssEditor"></div>
+                <div class="editor-pane" id="jsEditor"></div>
+            </div>
+            <div class="panel-footer controls">
+                <button class="btn btn-primary" id="downloadButton" title="Combine Code and download in a single HTML File.">Download HTML</button>
+                <button class="btn btn-success" id="renderButton" title="Combine Code and render preview">Render Preview</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div class="preview-modal" id="previewModal">
+        <div class="preview-content">
+            <div class="preview-header">
+                <h3>Preview</h3>
+                <span class="close-preview" id="closePreview">&times;</span>
+            </div>
+            <iframe class="preview-frame" id="previewFrame"></iframe>
+        </div>
+    </div>
+    
+    <!-- Config Modal -->
+    <div class="config-modal" id="configModal">
+        <div class="config-content">
+            <div class="config-header">
+                <h3>API Configuration</h3>
+                <span class="close-config" id="closeConfig">&times;</span>
+            </div>
+            <form class="config-form" id="configForm">
+                <div class="form-group">
+                    <label for="apiEndpoint">API Endpoint</label>
+                    <input type="url" id="apiEndpoint" placeholder="https://api.openai.com/v1/chat/completions" required>
+                </div>
+                <div class="form-group">
+                    <label for="apiKey">API Key</label>
+                    <input type="password" id="apiKey" placeholder="sk-..." required>
+                </div>
+                <div class="form-group">
+                    <label for="modelName">Model Name</label>
+                    <input type="text" id="modelName" placeholder="GPT-4" required>
+                </div>
+                <button type="submit" class="save-config">Save Configuration</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- CodeMirror JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
+
+    <script>
+// Wait for DOM to load
+    window.onload = function() {
+        // Add passive event listeners to improve performance
+        document.addEventListener('touchstart', function(){}, {passive: true});
+        document.addEventListener('touchmove', function(){}, {passive: true});
+        document.addEventListener('wheel', function(){}, {passive: true});
+        document.addEventListener('mousewheel', function(){}, {passive: true});
+		window.addEventListener('load', refreshAllEditors);
+		
+        // LLM API Configuration
+        let apiConfig = {
+            endpoint: localStorage.getItem('apiEndpoint') || '',
+            apiKey: localStorage.getItem('apiKey') || '',
+            model: localStorage.getItem('modelName') || 'gpt-3.5-turbo'
+        };
+        
+        // Initialize flag for API ready state
+        let isApiConfigured = apiConfig.endpoint && apiConfig.apiKey && apiConfig.model;
+        
+        // Set up elements for easy access
+        const sendButton = document.getElementById("sendButton");
+        const chatInput = document.getElementById("chatInput");
+        const messagesContainer = document.getElementById("messages");
+        
+        // Enable or disable chat based on API configuration
+        function updateChatAvailability() {
+            sendButton.disabled = !isApiConfigured;
+            if (isApiConfigured) {
+                // Clear system message and add welcome message
+                messagesContainer.innerHTML = '';
+                addMessage("Hello! I'm here to help you with your code. What would you like to work on today?", false);
+            } else {
+                // Add system message if not configured
+                messagesContainer.innerHTML = '';
+                addSystemMessage("Please configure the API settings to start chatting with the LLM.");
+            }
+        }
+        
+        // Call initially to set correct state
+        updateChatAvailability();
+        
+        // Initialize editors
+        var htmlEditor = CodeMirror(document.getElementById("htmlEditor"), {
+            mode: "htmlmixed",
+            theme: "dracula",
+            lineNumbers: true,
+            lineWrapping: false,
+            scrollbarStyle: "native",
+            viewportMargin: Infinity,
+            value: "<!DOCTYPE html>\n<html>\n<head>\n  <title>My Page</title>\n</head>\n<body>\n  <h1>Hello World</h1>\n  <p>Start coding here...</p>\n</body>\n</html>"
+        });
+
+        var cssEditor = CodeMirror(document.getElementById("cssEditor"), {
+            mode: "css",
+            theme: "dracula",
+            lineNumbers: true,
+            lineWrapping: false,
+            scrollbarStyle: "native",
+            viewportMargin: Infinity,
+            value: "body {\n  font-family: Arial, sans-serif;\n  margin: 20px;\n}\n\nh1 {\n  color: #333;\n}"
+        });
+
+        var jsEditor = CodeMirror(document.getElementById("jsEditor"), {
+            mode: "javascript",
+            theme: "dracula",
+            lineNumbers: true,
+            lineWrapping: false,
+            scrollbarStyle: "native",
+            viewportMargin: Infinity,
+            value: "console.log('Page loaded!');"
+        });
+
+        // Tab switching
+        document.getElementById("htmlTab").onclick = function() {
+            setActiveTab("html");
+        };
+        
+        document.getElementById("cssTab").onclick = function() {
+            setActiveTab("css");
+        };
+        
+        document.getElementById("jsTab").onclick = function() {
+            setActiveTab("js");
+        };
+
+		function setActiveTab(tabName) {
+			// Update tab styles
+			var tabs = document.querySelectorAll(".tab");
+			for (var i = 0; i < tabs.length; i++) {
+				tabs[i].classList.remove("active");
+			}
+			document.getElementById(tabName + "Tab").classList.add("active");
+			
+			// Show correct editor
+			var panes = document.querySelectorAll(".editor-pane");
+			for (var i = 0; i < panes.length; i++) {
+				panes[i].classList.remove("active");
+			}
+			document.getElementById(tabName + "Editor").classList.add("active");
+			
+			// Add a small delay before refreshing the editor for more reliable results
+			setTimeout(function() {
+				if (tabName === "html") htmlEditor.refresh();
+				if (tabName === "css") cssEditor.refresh();
+				if (tabName === "js") jsEditor.refresh();
+			}, 50);
+		}
+
+        // Function to create combined HTML
+        function createCombinedHTML() {
+            var htmlContent = htmlEditor.getValue();
+            var cssContent = cssEditor.getValue();
+            var jsContent = jsEditor.getValue();
+            
+            // Create combined HTML with string concatenation
+            var step1 = htmlContent.replace("</head>", "<style>\n" + cssContent + "\n</style>\n</head>");
+            var combined = step1.replace("</body>", "<script>\n" + jsContent + "\n<\/script>\n</body>");
+            
+            return combined;
+        }
+        
+        // Preview handling
+        document.getElementById("renderButton").onclick = function() {
+            var combined = createCombinedHTML();
+            
+            // Show modal first
+            document.getElementById("previewModal").style.display = "block";
+            
+            // Get the iframe and set proper content
+            var iframe = document.getElementById("previewFrame");
+            
+            try {
+                // Use data URI to avoid cross-origin issues
+                iframe.src = "data:text/html;charset=utf-8," + encodeURIComponent(combined);
+            } catch (e) {
+                console.error("Error setting iframe content:", e);
+            }
+        };
+        
+        // Download functionality
+        document.getElementById("downloadButton").onclick = function() {
+            var combined = createCombinedHTML();
+            
+            // Create a blob with the content
+            var blob = new Blob([combined], {type: "text/html;charset=utf-8"});
+            
+            // Create a temporary download link
+            var downloadLink = document.createElement("a");
+            downloadLink.href = URL.createObjectURL(blob);
+            
+            // Set a default filename
+            var filename = "webpage.html";
+            
+            // Look for title tag in HTML to use as filename
+            var titleMatch = combined.match(/<title>(.*?)<\/title>/i);
+            if (titleMatch && titleMatch[1]) {
+                // Clean up the title to make it suitable for a filename
+                filename = titleMatch[1].trim()
+                    .replace(/[^a-z0-9]/gi, '_') // Replace non-alphanumeric chars with underscores
+                    .replace(/_+/g, '_')         // Replace multiple underscores with a single one
+                    .toLowerCase() + ".html";
+            }
+            
+            downloadLink.download = filename;
+            
+            // Trigger the download
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            
+            // Clean up
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(downloadLink.href);
+            
+            // Show a confirmation
+            addSystemMessage("Downloaded file: " + filename);
+        };
+
+        // Close preview modal
+        document.getElementById("closePreview").onclick = function() {
+            document.getElementById("previewModal").style.display = "none";
+            // Clear iframe source when closing
+            document.getElementById("previewFrame").src = "";
+        };
+
+        // Close modal on outside click and escape key
+        window.onclick = function(event) {
+            var previewModal = document.getElementById("previewModal");
+            var configModal = document.getElementById("configModal");
+            
+            if (event.target === previewModal) {
+                previewModal.style.display = "none";
+                // Clear iframe source when closing
+                document.getElementById("previewFrame").src = "";
+            }
+            
+            if (event.target === configModal) {
+                configModal.style.display = "none";
+            }
+        };
+        
+        // Close modal on Escape key
+        window.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                document.getElementById("previewModal").style.display = "none";
+                document.getElementById("configModal").style.display = "none";
+                // Clear iframe source when closing
+                document.getElementById("previewFrame").src = "";
+            }
+        });
+
+        // Helper function to escape HTML
+        function escapeHTML(html) {
+            const div = document.createElement('div');
+            div.textContent = html;
+            return div.innerHTML;
+        }
+        
+        // Chat functionality
+        function addMessage(text, isUser) {
+            var messageDiv = document.createElement("div");
+            messageDiv.className = "message " + (isUser ? "user-message" : "assistant-message");
+            
+            // Process code blocks with ```
+            if (!isUser && text.includes("```")) {
+                let parts = text.split("```");
+                let processedText = "";
+                
+                for (let i = 0; i < parts.length; i++) {
+                    if (i % 2 === 0) {
+                        // Regular text
+                        processedText += escapeHTML(parts[i]);
+                    } else {
+                        // Code block
+                        let codeContent = parts[i];
+                        let language = "";
+                        
+                        // Check if there's a language specified
+                        if (codeContent.indexOf("\n") > 0) {
+                            language = codeContent.substring(0, codeContent.indexOf("\n")).trim();
+                            codeContent = codeContent.substring(codeContent.indexOf("\n") + 1);
+                        }
+                        
+                        processedText += `<div class="code-block">${escapeHTML(codeContent.trim())}</div>`;
+                    }
+                }
+                
+                messageDiv.innerHTML = processedText;
+            } else {
+                messageDiv.textContent = text;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function addSystemMessage(text) {
+            var messageDiv = document.createElement("div");
+            messageDiv.className = "message system-message";
+            messageDiv.textContent = text;
+            messagesContainer.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Create conversation history array
+        let conversationHistory = [];
+        
+        // Function to generate a unique message ID
+        function generateMessageId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+        
+        // Function to send message to OpenAI API with streaming
+        async function sendToLLM(userMessage) {
+            // Disable send button and show loading state
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<div class="spinner"></div>Sending...';
+            
+            // Create a message element for the assistant response that we'll update
+            const responseDiv = document.createElement("div");
+            responseDiv.className = "message assistant-message";
+            messagesContainer.appendChild(responseDiv);
+            
+            try {
+                // Add user message to history
+                conversationHistory.push({
+                    role: "user",
+                    content: userMessage
+                });
+                
+                const response = await fetch(apiConfig.endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiConfig.apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: apiConfig.model,
+                        messages: conversationHistory,
+                        temperature: 0.7,
+                        stream: true // Enable streaming
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || 'API request failed');
+                }
+                
+                // Set up the streaming response reader
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let fullMessage = '';
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    // Decode the chunk
+                    const chunk = decoder.decode(value, { stream: true });
+                    
+                    // Process the SSE format
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            
+                            // Check for the "[DONE]" message
+                            if (data === '[DONE]') continue;
+                            
+                            try {
+                                const parsedData = JSON.parse(data);
+                                const contentDelta = parsedData.choices[0]?.delta?.content || '';
+                                
+                                if (contentDelta) {
+                                    fullMessage += contentDelta;
+                                    
+                                    // Process code blocks with ``` for display
+                                    let displayText = fullMessage;
+                                    if (displayText.includes("```")) {
+                                        let parts = displayText.split("```");
+                                        let processedText = "";
+                                        
+                                        for (let i = 0; i < parts.length; i++) {
+                                            if (i % 2 === 0) {
+                                                // Regular text
+                                                processedText += escapeHTML(parts[i]);
+                                            } else {
+                                                // Code block
+                                                let codeContent = parts[i];
+                                                let language = "";
+                                                
+                                                // Check if there's a language specified
+                                                if (codeContent.indexOf("\n") > 0) {
+                                                    language = codeContent.substring(0, codeContent.indexOf("\n")).trim();
+                                                    codeContent = codeContent.substring(codeContent.indexOf("\n") + 1);
+                                                }
+                                                
+                                                processedText += `<div class="code-block">${escapeHTML(codeContent.trim())}</div>`;
+                                            }
+                                        }
+                                        
+                                        responseDiv.innerHTML = processedText;
+                                    } else {
+                                        responseDiv.textContent = displayText;
+                                    }
+                                    
+                                    // Scroll to bottom as text appears
+                                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                                }
+                            } catch (error) {
+                                console.error('Error parsing streaming data:', error, data);
+                            }
+                        }
+                    }
+                }
+                
+                // After streaming completes, add assistant's complete response to history
+                conversationHistory.push({
+                    role: "assistant",
+                    content: fullMessage
+                });
+                
+                return fullMessage;
+            } catch (error) {
+                console.error('Error calling LLM API:', error);
+                responseDiv.remove(); // Remove the empty response div
+                addSystemMessage(`Error: ${error.message}`);
+                return null;
+            } finally {
+                // Reset send button
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send';
+            }
+        }
+
+        // Send button click handler
+        document.getElementById("sendButton").onclick = async function() {
+            var message = chatInput.value.trim();
+            if (message) {
+                // Add user message
+                addMessage(message, true);
+                chatInput.value = "";
+                
+                // Get AI response using streaming
+                await sendToLLM(message);
+            }
+        };
+
+        // Send message on Enter key
+        chatInput.onkeydown = function(e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendButton.click();
+            }
+        };
+        
+        // New Chat functionality
+        document.getElementById("newChatButton").onclick = function() {
+            if (isApiConfigured) {
+                // Clear conversation history
+                conversationHistory = [];
+                
+                // Clear messages in the UI
+                messagesContainer.innerHTML = '';
+                
+                // Add a new welcome message
+                addMessage("Starting a new conversation. How can I help you today?", false);
+            } else {
+                // If API is not configured, show a reminder
+                addSystemMessage("Please configure the API settings first to start a new chat.");
+            }
+        };
+        
+        // Config modal functionality
+        document.getElementById("configButton").onclick = function() {
+            // Pre-fill form with current values
+            document.getElementById("apiEndpoint").value = apiConfig.endpoint;
+            document.getElementById("apiKey").value = apiConfig.apiKey;
+            document.getElementById("modelName").value = apiConfig.model;
+            
+            // Show modal
+            document.getElementById("configModal").style.display = "block";
+        };
+        
+        // Close config modal
+        document.getElementById("closeConfig").onclick = function() {
+            document.getElementById("configModal").style.display = "none";
+        };
+        
+        // Form submission
+        document.getElementById("configForm").onsubmit = function(e) {
+            e.preventDefault();
+            
+            // Update config
+            apiConfig = {
+                endpoint: document.getElementById("apiEndpoint").value.trim(),
+                apiKey: document.getElementById("apiKey").value.trim(),
+                model: document.getElementById("modelName").value
+            };
+            
+            // Save to localStorage
+            localStorage.setItem('apiEndpoint', apiConfig.endpoint);
+            localStorage.setItem('apiKey', apiConfig.apiKey);
+            localStorage.setItem('modelName', apiConfig.model);
+            
+            // Update API state and reset conversation
+            isApiConfigured = true;
+            conversationHistory = []; // Clear conversation history
+            updateChatAvailability();
+            
+            // Close modal
+            document.getElementById("configModal").style.display = "none";
+        };
+
+		function refreshAllEditors() {
+			// Add a small delay to ensure the DOM has updated
+			setTimeout(function() {
+				htmlEditor.refresh();
+				cssEditor.refresh();
+				jsEditor.refresh();
+			}, 50);
+		}
+
+        // Initialize editors on window resize
+		window.onresize = refreshAllEditors;
+    };
+    </script>
+</body>
+</html>
